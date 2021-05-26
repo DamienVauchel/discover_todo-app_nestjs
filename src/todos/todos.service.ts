@@ -1,6 +1,9 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { Todo } from "./interfaces/todo.interface";
 import { CreateTodoDto } from "./dto/create-todo.dto";
+import { TodoCreation } from "./interfaces/todoCreation.interface";
+import { TodoEdition } from "./interfaces/todoEdition.interface";
+import { TodoDeletion } from "./interfaces/todoDeletion.interface";
 
 @Injectable()
 export class TodosService {
@@ -29,7 +32,7 @@ export class TodosService {
     return this.todos;
   }
 
-  findOne(id: string) {
+  findOne(id: string): Todo {
     const $result = this.todos.find(todo => todo.id === +id)
 
     if (undefined === $result) {
@@ -39,33 +42,44 @@ export class TodosService {
     return $result;
   }
 
-  create(todo: CreateTodoDto) {
+  create(todo: CreateTodoDto): TodoCreation {
     this.todos = [...this.todos, todo];
+
+    return { createdTodo: 1, todo }
   }
 
-  edit(id: string, todo: Todo) {
+  edit(id: string, todo: Todo): TodoEdition {
     this.findOne(id);
 
     if (todo.id !== +id) {
       throw new ConflictException('You can\'t update an id');
     }
 
-    const updatedTodos = this.todos.map(t => t.id !== +id ? t : todo);
-    this.todos = [...updatedTodos];
+    this.todos = this.todos.map(t => t.id !== +id ? t : todo);
 
     return { updatedTodo: 1, todo: todo }
   }
 
-  toggleDone(id: string, todo: Todo) {
+  toggleDone(id: string, todo: Todo): TodoEdition {
     const todoToUpdate = this.findOne(id);
 
     if (undefined !== todo.done) {
       todoToUpdate.done = todo.done;
     }
 
-    const updatedTodos = this.todos.map(t => t.id !== +id ? t : todoToUpdate);
-    this.todos = [...updatedTodos];
+    this.todos = this.todos.map(t => t.id !== +id ? t : todoToUpdate);
 
     return { updatedTodo: 1, todo: todoToUpdate }
+  }
+
+  delete(id: string): TodoDeletion {
+    const todosBeforeDeleteNumber = this.todos.length;
+    this.todos = this.todos.filter(t => t.id !== +id);
+
+    if (this.todos.length < todosBeforeDeleteNumber) {
+      return { deletedTodos: 1, nbTodos: this.todos.length };
+    }
+
+    throw new NotFoundException('No todo to delete');
   }
 }
