@@ -1,85 +1,72 @@
-import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import { Todo } from "./interfaces/todo.interface";
-import { CreateTodoDto } from "./dto/create-todo.dto";
 import { TodoCreation } from "./interfaces/todoCreation.interface";
 import { TodoEdition } from "./interfaces/todoEdition.interface";
 import { TodoDeletion } from "./interfaces/todoDeletion.interface";
+import { PrismaService } from "../prisma/prisma.service";
 
 @Injectable()
 export class TodosService {
-  todos: Todo[] = [
-    {
-      id: 1,
-      title: 'Title 1',
-      description: 'Description 1',
-      done: false,
-    },
-    {
-      id: 2,
-      title: 'Title 2',
-      description: 'Description 2',
-      done: true,
-    },
-    {
-      id: 3,
-      title: 'Title 3',
-      description: 'Description 3',
-      done: false,
-    },
-  ]
+  constructor(private readonly prisma: PrismaService) {}
 
-  findAll(): Todo[] {
-    return this.todos;
+  async findAll(): Promise<Todo[]> {
+    return await this.prisma.todo.findMany();
   }
 
-  findOne(id: string): Todo {
-    const $result = this.todos.find(todo => todo.id === +id)
+  async findOne(id: string): Promise<Todo> {
+    const result = await this.prisma.todo.findUnique({
+      where: { id:  id }
+    });
 
-    if (undefined === $result) {
-      throw new NotFoundException('No todo for this id');
+    if (null === result) {
+      throw new NotFoundException(`No todo for id ${id}`);
     }
 
-    return $result;
+    return result;
   }
 
-  create(todo: CreateTodoDto): TodoCreation {
-    this.todos = [...this.todos, todo];
+  async create(todo: Prisma.TodoCreateInput): Promise<TodoCreation> {
+    const response = await this.prisma.todo.create({ data: todo });
 
-    return { createdTodo: 1, todo }
+    return { createdTodo: 1, todo: response }
   }
 
-  edit(id: string, todo: Todo): TodoEdition {
-    this.findOne(id);
+  async edit(id: string, todo: Prisma.TodoUpdateInput): Promise<TodoEdition> {
+    await this.findOne(id);
 
-    if (todo.id !== +id) {
+    if (undefined !== todo.id && todo.id !== id) {
       throw new ConflictException('You can\'t update an id');
     }
 
-    this.todos = this.todos.map(t => t.id !== +id ? t : todo);
+    await this.prisma.todo.update({
+      where: { id: id },
+      data: todo
+    });
 
-    return { updatedTodo: 1, todo: todo }
+    return { updatedTodo: 1, todo: await this.findOne(id) }
   }
 
-  toggleDone(id: string, todo: Todo): TodoEdition {
-    const todoToUpdate = this.findOne(id);
+  async toggleDone(id: string, todo: Prisma.TodoUpdateInput): Promise<TodoEdition> {
+    const todoToUpdate = await this.findOne(id);
 
-    if (undefined !== todo.done) {
-      todoToUpdate.done = todo.done;
+    if (undefined === todo.done) {
+      throw new BadRequestException();
     }
 
-    this.todos = this.todos.map(t => t.id !== +id ? t : todoToUpdate);
+    todoToUpdate.done = !!todo.done;
+    await this.prisma.todo.update({
+      where: { id: id },
+      data: todoToUpdate
+    });
 
-    return { updatedTodo: 1, todo: todoToUpdate }
+    return { updatedTodo: 1, todo: await this.findOne(id) }
   }
 
-  delete(id: string): TodoDeletion {
-    const todosBeforeDeleteNumber = this.todos.length;
-    this.todos = this.todos.filter(t => t.id !== +id);
+  async delete(id: string): Promise<TodoDeletion> {
+    await this.findOne(id);
+    await this.prisma.todo.delete({ where: { id } });
 
-    if (this.todos.length < todosBeforeDeleteNumber) {
-      return { deletedTodos: 1, nbTodos: this.todos.length };
-    }
-
-    throw new NotFoundException('No todo to delete');
+    return { deletedTodos: 1, nbTodos: +await this.prisma.todo.count() }
   }
 }
