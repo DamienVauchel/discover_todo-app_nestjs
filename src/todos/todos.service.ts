@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { Todo } from "./interfaces/todo.interface";
 import { CreateTodoDto } from "./dto/create-todo.dto";
 
@@ -30,14 +30,42 @@ export class TodosService {
   }
 
   findOne(id: string) {
-    const $result = this.todos.find(todo => todo.id === Number(id))
+    const $result = this.todos.find(todo => todo.id === +id)
 
+    if (undefined === $result) {
+      throw new NotFoundException('No todo for this id');
+    }
 
-
-    console.log($result)
+    return $result;
   }
 
   create(todo: CreateTodoDto) {
     this.todos = [...this.todos, todo];
+  }
+
+  edit(id: string, todo: Todo) {
+    this.findOne(id);
+
+    if (todo.id !== +id) {
+      throw new ConflictException('You can\'t update an id');
+    }
+
+    const updatedTodos = this.todos.map(t => t.id !== +id ? t : todo);
+    this.todos = [...updatedTodos];
+
+    return { updatedTodo: 1, todo: todo }
+  }
+
+  toggleDone(id: string, todo: Todo) {
+    const todoToUpdate = this.findOne(id);
+
+    if (undefined !== todo.done) {
+      todoToUpdate.done = todo.done;
+    }
+
+    const updatedTodos = this.todos.map(t => t.id !== +id ? t : todoToUpdate);
+    this.todos = [...updatedTodos];
+
+    return { updatedTodo: 1, todo: todoToUpdate }
   }
 }
